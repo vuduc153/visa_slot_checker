@@ -23,7 +23,7 @@ def get_app_id():
     match = re.search(pattern, response.text)
 
     if match:
-        return f'fr.gouv$+${match.group(1)}-meae-ttc'
+        return f'fr.gouv$+{match.group(1)}-meae-ttc'
 
 
 def get_captcha():
