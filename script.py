@@ -8,6 +8,63 @@ from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPM
 from bs4 import BeautifulSoup
 import re
+from datetime import datetime, timedelta
+import time
+
+
+def get_available_date(start_date_str, end_date_str, excluded_dates):
+
+    # Convert start and end dates to datetime objects
+    start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+    end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+    avail_date = []
+
+    # Iterate over dates between start and end dates
+    current_date = start_date
+    while current_date <= end_date:
+        # Check if the current date is not in the excluded dates list
+        if current_date.strftime('%Y-%m-%d') not in excluded_dates:
+            avail_date.append(current_date)
+        # Move to the next date
+        current_date += timedelta(days=1)
+    
+    # If no valid date found, return None
+    return avail_date
+
+
+def get_interval(app_id):
+
+    interval_endpoint = "https://api.consulat.gouv.fr/api/team/621540d353069dec25bd0045/reservations/get-interval?serviceId=624317926863643fe83c8548"
+
+    # Add headers for request authentication
+    headers = {'x-gouv-web': 'fr.gouv.consulat', 'x-gouv-app-id': app_id, 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+    response = requests.get(interval_endpoint, headers=headers)
+
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Interval request failed.")
+
+
+def get_excluded_days(app_id):
+
+    excluded_day_endpoint = "https://api.consulat.gouv.fr/api/team/621540d353069dec25bd0045/reservations/exclude-days"
+
+    # Add headers for request authentication
+    headers = {'x-gouv-web': 'fr.gouv.consulat', 'x-gouv-app-id': app_id, 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+    body = {
+        "session": {
+            "624317926863643fe83c8548": True
+        }
+    }
+    response = requests.post(excluded_day_endpoint, headers=headers, json=body)
+
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Excluded days request failed.")
 
 
 def get_app_id():
@@ -54,6 +111,7 @@ def get_captcha():
 
 
 def convert_svg_to_jpg_base64(svg_base64):
+
     # Decode the Base64 SVG image to binary
     svg_data = base64.b64decode(svg_base64)
 
@@ -75,11 +133,16 @@ def convert_svg_to_jpg_base64(svg_base64):
 
 if __name__ == '__main__':
 
-    api_key = os.environ["TWOCAPTCHA_API_KEY"]
-    svg_b64 = get_captcha()
-    jpg_b64 = convert_svg_to_jpg_base64(svg_b64)
+    while True:
 
-    solver = TwoCaptcha(api_key)
-    res = solver.normal(jpg_b64)
+        app_id = get_app_id()
+        interval = get_interval(app_id)
+        excluded = get_excluded_days(app_id)
+        start_date, end_date = interval["start"], interval["end"]
 
-    print(res)
+        avail_date = get_available_date(start_date, end_date, excluded)
+
+        if avail_date:
+            # Notification logic
+
+        time.sleep(180)
