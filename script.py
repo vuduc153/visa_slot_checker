@@ -46,28 +46,49 @@ def send_email(sender_email, sender_password, subject, message, recipients):
         print("Failed to send email:", str(e))
 
 
+def get_available_time(date_string, app_id):
+
+    # serviceId params stands for Visa service
+    # team params stands for the geographical zone the request is coming from
+    avail_time_endpoint = "https://api.consulat.gouv.fr/api/team/621540d353069dec25bd0045/param/service-custom-session"
+
+    # Add headers for request authentication
+    headers = {'x-gouv-web': 'fr.gouv.consulat', 'x-gouv-app-id': app_id, 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+    params = {
+        'date': date_string,
+        'zone_id': '624317926863643fe83c8548'
+    }
+    response = requests.get(avail_time_endpoint, headers=headers, params=params)
+
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print("Get available time request failed.")
+
+    
 def get_available_date(start_date_str, end_date_str, excluded_dates):
 
     # Convert start and end dates to datetime objects
     start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
     end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
-    avail_date = []
+    avail_dates = []
 
     # Iterate over dates between start and end dates
     current_date = start_date
     while current_date <= end_date:
         # Check if the current date is not in the excluded dates list
         if current_date.strftime('%Y-%m-%d') not in excluded_dates:
-            avail_date.append(current_date)
+            avail_dates.append(current_date.strftime('%Y-%m-%d'))
         # Move to the next date
         current_date += timedelta(days=1)
     
-    # If no valid date found, return None
-    return avail_date
+    return avail_dates
 
 
 def get_interval(app_id):
 
+    # serviceId params stands for Visa service
+    # team params stands for the geographical zone the request is coming from
     interval_endpoint = "https://api.consulat.gouv.fr/api/team/621540d353069dec25bd0045/reservations/get-interval?serviceId=624317926863643fe83c8548"
 
     # Add headers for request authentication
@@ -83,6 +104,8 @@ def get_interval(app_id):
 
 def get_excluded_days(app_id):
 
+    # serviceId params stands for Visa service
+    # team params stands for the geographical zone the request is coming from
     excluded_day_endpoint = "https://api.consulat.gouv.fr/api/team/621540d353069dec25bd0045/reservations/exclude-days"
 
     # Add headers for request authentication
@@ -109,13 +132,19 @@ def get_app_id():
     headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
     response = requests.get(starting_page_url, headers=headers)
 
-    # Get the app id from the documen
-    pattern = r'"x-gouv-app-id":"([^"]+)"'
-    match = re.search(pattern, response.text)
+    # Check if the request was successful (status code 200)
+    if response.status_code == 200:
 
-    if match:
-        return f'fr.gouv$+{match.group(1)}-meae-ttc'
+        # Get the app id from the documen
+        pattern = r'"x-gouv-app-id":"([^"]+)"'
+        match = re.search(pattern, response.text)
 
+        if match:
+            return f'fr.gouv$+{match.group(1)}-meae-ttc'
+    
+    else:
+        print("Get app id request failed.")
+    
 
 def get_captcha():
 
@@ -182,17 +211,22 @@ if __name__ == '__main__':
         subject = '[NOTIFICATION] Visa'
         recipients = os.environ['MAILING_LIST'].split(";")
 
-        avail_date = get_available_date(start_date, end_date, excluded)
-        avail_str = f"Available date: {avail_date}"
+        avail_dates = get_available_date(start_date, end_date, excluded)
+        body = f"Available date: {avail_dates}"
 
-        if avail_date:
-            print(avail_date)
+        if avail_dates:
+
+            for date in avail_dates:
+                avail_times = get_available_time(date, app_id)
+                body += f"\n================\nDate: {date}\nAvailable time: {avail_times}"
+
             # Notification logic
-            send_email(sender_email, sender_password, subject, avail_str, recipients)
+            send_email(sender_email, sender_password, subject, body, recipients)
+            print(body)
 
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(log_file, 'a') as file:
             file.write(current_time + '\n')
-            file.write(avail_str + '\n')
+            file.write(body + '\n')
 
-        time.sleep(180)
+        time.sleep(90)
