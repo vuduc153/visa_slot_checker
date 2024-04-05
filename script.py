@@ -10,6 +10,40 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timedelta
 import time
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+
+def send_email(sender_email, sender_password, subject, message, recipients):
+
+    # Set up the SMTP server
+    smtp_server = 'smtp.gmail.com'
+    smtp_port = 587
+
+    # Create a multipart message
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = ', '.join(recipients)
+    msg['Subject'] = subject
+
+    # Add message body
+    msg.attach(MIMEText(message, 'plain'))
+
+    try:
+        # Connect to the SMTP server
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        # Login to the SMTP server
+        server.login(sender_email, sender_password)
+        # Send the email
+        server.sendmail(sender_email, recipients, msg.as_string())
+        # Close the connection to the SMTP server
+        server.quit()
+        print("Email sent successfully")
+
+    except Exception as e:
+        print("Failed to send email:", str(e))
 
 
 def get_available_date(start_date_str, end_date_str, excluded_dates):
@@ -135,14 +169,30 @@ if __name__ == '__main__':
 
     while True:
 
+        log_file = 'logfile.txt'
+
         app_id = get_app_id()
         interval = get_interval(app_id)
         excluded = get_excluded_days(app_id)
         start_date, end_date = interval["start"], interval["end"]
 
+        # Get email credentials from env variables
+        sender_email = os.environ['SENDER_EMAIL']
+        sender_password = os.environ['SENDER_PASSWORD']
+        subject = '[NOTIFICATION] Visa'
+        recipients = os.environ['MAILING_LIST'].split(";")
+
         avail_date = get_available_date(start_date, end_date, excluded)
+        avail_str = f"Available date: {avail_date}"
 
         if avail_date:
+            print(avail_date)
             # Notification logic
+            send_email(sender_email, sender_password, subject, avail_str, recipients)
+
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_file, 'a') as file:
+            file.write(current_time + '\n')
+            file.write(avail_str + '\n')
 
         time.sleep(180)
